@@ -101,4 +101,3 @@ def uninstall_cc_runtime(ctx):
         "default?ref=v{}".format(COCO_RELEASE_VERSION),
     )
     run_kubectl_command("delete -k {}".format(cc_runtime_url))
-

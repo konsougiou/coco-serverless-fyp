@@ -4,10 +4,9 @@ This directory summarizes the different evaluation efforts to measure the
 performance of Knative using confidential containers, and place it in relation
 to well-known serverless benchmarks.
 
-The evaluation of the project is divided in three parts:
+The evaluation of the project is divided in two parts:
 * [Performance Measurements](#performance-measurements) - performance (overheads) of Knative on CoCo.
 * [Benchmarks](#benchmarks) - evaluating Knative + CoCo on standarised benchmarks.
-* [Custom Solution Evaluation](#Custom-solution-evaluation) - benchmarking Knative + CoCo-Hybrid in comparison to the other baselines.
 
 In general, we compare Knative running on regular containers, on VMs (aka
 Knative + Kata) and with Knative + CoCo with different levels of security: (i)
@@ -55,8 +54,6 @@ make sure to run:
 ```bash
 inv eval.prune.pods
 ```
-
-
 
 ### Start-Up Costs
 

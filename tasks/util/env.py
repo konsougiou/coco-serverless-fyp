@@ -1,5 +1,6 @@
 from os.path import dirname, realpath, join
 from subprocess import run
+from subprocess import run
 
 PROJ_ROOT = dirname(dirname(dirname(realpath(__file__))))
 

@@ -292,7 +292,6 @@ def plot(ctx):
         if baseline not in results_dict:
             results_dict[baseline] = {}
 
-
         results_dict[baseline][flavour] = {}
         results = read_csv(csv)
         groupped = results.groupby("Event", as_index=False)

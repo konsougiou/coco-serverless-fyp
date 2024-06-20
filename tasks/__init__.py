@@ -8,21 +8,6 @@ from . import cosign
 from . import format_code
 from . import gc
 from . import k8s
-from . import k9s
-from . import kata
-from . import kbs
-from . import knative
-from . import kubeadm
-from . import operator
-from . import ovmf
-from . import qemu
-from . import registry
-from . import sev
-from . import skopeo
-from . import nydus_snapshotter
-
-from tasks.eval import ns as eval_ns
-from tasks.profile import ns as profile_ns
 
 ns = Collection(
     apps,

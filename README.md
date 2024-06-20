@@ -100,6 +100,75 @@ inv nydus-snapshotter.populate_host_sharing_config
 inv nydus-snapshotter.toggle_mode --hybrid
 ```
 
+All instructions in this repository assume that you have checked-out the source
+code, and have activated the python virtual environment:
+
+```bash
+source ./bin/workon.sh
+
+# List available tasks
+inv -l
+```
+
+## Pre-Requisites
+
+You will need CoCo's fork of containerd built and running. To this extent you
+may run:
+
+```bash
+inv containerd.build
+inv containerd.install
+```
+
+You also need all the kubernetes-related tooling: `kubectl`, `kubeadm`, and
+`kubelet`:
+
+```bash
+inv k8s.install [--clean]
+```
+
+You may also want to install `k9s`, a kubernetes monitoring tool:
+
+```bash
+inv k9s.install
+```
+
+## Quick Start
+
+Deploy a (single-node) kubernetes cluster using `kubeadm`:
+
+```bash
+inv kubeadm.create
+```
+
+Second, install both the operator and the CC runtime from the upstream tag.
+We currently pin to version `v0.7.0` (see the [`COCO_RELEASE_VERSION` variable](
+https://github.com/csegarragonz/coco-serverless/tree/main/tasks/util/env.py)).
+
+```bash
+inv operator.install
+inv operator.install-cc-runtime
+```
+
+Third, update the `initrd` file to include our patched `kata-agent`:
+
+```bash
+inv kata.replace-agent
+```
+
+if it is the first time, you will have to manually build the agent following
+[these instructions](./docs/kata.md#replacing-the-kata-agent).
+
+Then, you are ready to run one of the supported apps:
+* [Hello World! (Py)](./docs/helloworld_py.md) - simple HTTP server running in Python to test CoCo and Kata.
+* [Hello World! (Knative)](./docs/helloworld_knative.md) - same app as before, but invoked over Knatvie.
+* [Hello Attested World! (Knative + Attestation)](./docs/helloworld_knative_attestation.md) - same setting as the Knative hello world, but with varying levels of attestation configured.
+
+If your app uses Knative, you will have to install it first:
+
+```bash
+inv knative.install
+```
 
 ## Evaluation
 
