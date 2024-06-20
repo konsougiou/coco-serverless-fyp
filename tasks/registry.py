@@ -6,6 +6,8 @@ from tasks.util.docker import is_ctr_running
 from tasks.util.env import (
     CONTAINERD_CONFIG_FILE,
     CONTAINERD_CONFIG_ROOT,
+    DOCKER_REGISTRY_URL,
+    EXTERNAL_REGISTRY_URL,
     K8S_CONFIG_DIR,
     LOCAL_REGISTRY_URL,
     get_node_url,
@@ -23,24 +25,53 @@ REGISTRY_CERT_FILE = "domain.crt"
 HOST_CERT_PATH = join(HOST_CERT_DIR, REGISTRY_CERT_FILE)
 REGISTRY_CTR_NAME = "csg-coco-registry"
 
-REGISTRY_IMAGE_TAG = "registry:2.7"
+TAG = "2.7"
+REGISTRY_IMAGE_TAG = f"registry:{TAG}"
 
 K8S_SECRET_NAME = "csg-coco-registry-customca"
 
+PRIVATE_REPOSITORY = join(DOCKER_REGISTRY_URL, "local-registry")
+REGISTRY_DOCKERFILE_PATH = join("docker", "registry.dockerfile")
+
 
 @task
-def start(ctx):
+def start(ctx, external_ip=None):
     """
-    Configure a local container registry reachable from CoCo guests in K8s
+    Configure a local container registry reachable from CoCo guests in K8s.
+    If external_ip is provided, create a container image embedded with certs
+    and push to a private registry, intended to be pulled from machine with ip "external_ip"
     """
-    this_ip = get_node_url()
+    # this_ip = get_node_url()
+
+    # kube_cmd = (
+    # "-n knative-serving create secret generic {} --from-file=ca.crt={}".format(
+    #     K8S_SECRET_NAME, HOST_CERT_PATH
+    # )
+    # )
+    # run_kubectl_command(kube_cmd)
+
+    # # Second, patch the controller deployment
+    # configure_self_signed_certs(HOST_CERT_PATH, K8S_SECRET_NAME)
+
+    # return 0
+    #
 
     # ----------
     # DNS Config
     # ----------
 
     # Add DNS entry (careful to be able to sudo-edit the file)
+
     dns_file = "/etc/hosts"
+
+    extra_files = {
+        dns_file: {"path": "/etc/hosts", "mode": "w"},
+        HOST_CERT_PATH: {"path": "/etc/ssl/certs/ca-certificates.crt", "mode": "a"},
+    }
+    replace_agent(extra_files=extra_files)
+
+    return 0
+
     dns_contents = (
         run("sudo cat {}".format(dns_file), shell=True, capture_output=True)
         .stdout.decode("utf-8")
@@ -49,22 +80,29 @@ def start(ctx):
     )
 
     # Only write the DNS entry if it is not there yet
-    dns_line = "{} {}".format(this_ip, LOCAL_REGISTRY_URL)
-    must_write = not any([dns_line in line for line in dns_contents])
 
-    if must_write:
-        actual_dns_line = "\n# CSG: DNS entry for local registry\n{}".format(dns_line)
+    # Local registry DNS entry:
+    local_dns_line = "{} {}".format(this_ip, LOCAL_REGISTRY_URL)
+    local_dns_in_contents = any([local_dns_line in line for line in dns_contents])
+
+    # External registry DNS entry:
+    if external_ip is not None:
+        extern_dns_line = "{} {}".format(external_ip, EXTERNAL_REGISTRY_URL)
+        extern_dns_in_contents = any([extern_dns_line in line for line in dns_contents])
+    else:
+        #Set to "True" so as to avoid writing the line in dns hosts
+        extern_dns_in_contents=True
+
+    if not local_dns_in_contents:
+        actual_dns_line = "\n# CSG: DNS entry for local registry\n{}".format(local_dns_line)
         write_cmd = "sudo sh -c \"echo '{}' >> {}\"".format(actual_dns_line, dns_file)
         run(write_cmd, shell=True, check=True)
 
-        # If creating a new registry, also update the local SSL certificates
-        system_cert_path = "/usr/share/ca-certificates/coco_csg_registry.crt"
-        run(
-            "sudo cp {} {}".format(HOST_CERT_PATH, system_cert_path),
-            shell=True,
-            check=True,
-        )
-        run("sudo dpkg-reconfigure ca-certificates")
+    if not extern_dns_in_contents:
+        actual_dns_line = "\n# CSG: DNS entry for extern registry\n{}".format(extern_dns_line)
+        write_cmd = "sudo sh -c \"echo '{}' >> {}\"".format(actual_dns_line, dns_file)
+        run(write_cmd, shell=True, check=True)
+
 
     # ----------
     # Docker Registry Config
@@ -74,18 +112,35 @@ def start(ctx):
     if not exists(HOST_CERT_DIR):
         makedirs(HOST_CERT_DIR)
 
+    if external_ip is not None:
+        SAN = '-addext "subjectAltName = DNS:{}, DNS:{}, IP:{}, IP:{}"'.format(
+            LOCAL_REGISTRY_URL, EXTERNAL_REGISTRY_URL, this_ip, external_ip
+            )
+    else:
+        SAN = '-addext "subjectAltName = DNS:{}, IP:{}"'.format(LOCAL_REGISTRY_URL, this_ip)
+
     openssl_cmd = [
         "openssl req",
         "-newkey rsa:4096",
         "-nodes -sha256",
         "-keyout {}".format(HOST_KEY_PATH),
-        '-addext "subjectAltName = DNS:{}"'.format(LOCAL_REGISTRY_URL),
+        SAN,
         "-x509 -days 365",
         "-out {}".format(HOST_CERT_PATH),
     ]
     openssl_cmd = " ".join(openssl_cmd)
     if not exists(HOST_CERT_PATH):
         run(openssl_cmd, shell=True, check=True)
+        # If creating a new registry, also update the local SSL certificates
+
+        system_cert_path = "/usr/local/share/ca-certificates/coco_csg_registry.crt"
+        run(
+            "sudo cp {} {}".format(HOST_CERT_PATH, system_cert_path),
+            shell=True,
+            check=True,
+        )
+        run("sudo update-ca-certificates")
+
 
     # Start self-hosted local registry with HTTPS
     docker_cmd = [
@@ -110,6 +165,26 @@ def start(ctx):
     else:
         print("WARNING: skipping starting container as it is already running...")
 
+    # If an external ip is provided, a container image with certs embedded is built, and pushed to 
+    # a private repository.
+    if external_ip is not None:
+        tmp_ctr_name = "tmp-registry"
+        image_tag = f"{PRIVATE_REPOSITORY}:{TAG}"
+
+        create_cmd = f"docker create --name {tmp_ctr_name} {REGISTRY_IMAGE_TAG}"
+        copy_cmd = f"docker cp {HOST_CERT_DIR}/. {tmp_ctr_name}:{GUEST_CERT_DIR}/"
+        commit_cmd = f"docker commit {tmp_ctr_name} {image_tag}"
+        push_cmd = f"docker push {image_tag}"
+        rm_cmd = f"docker rm {tmp_ctr_name}"
+
+        docker_cmds = [create_cmd, copy_cmd, commit_cmd, push_cmd, rm_cmd]
+        for cmd in docker_cmds:
+            print(cmd)
+            out = run(cmd, shell=True, capture_output=True)
+            assert out.returncode == 0, "Failed building docker container: {}".format(
+                out.stderr
+            )
+
     # Configure docker to be able to push to this registry
     docker_certs_dir = join("/etc/docker/certs.d", LOCAL_REGISTRY_URL)
     if not exists(docker_certs_dir):
@@ -132,19 +207,36 @@ def start(ctx):
     )
     update_toml(CONTAINERD_CONFIG_FILE, updated_toml_str)
 
-    # Add the correspnding configuration to containerd
+    # Add the correspnding configurations to containerd
     containerd_certs_dir = join(containerd_base_certs_dir, LOCAL_REGISTRY_URL)
     if not exists(containerd_certs_dir):
         run("sudo mkdir -p {}".format(containerd_certs_dir), shell=True, check=True)
 
-    containerd_certs_file = """
-server = "https://{registry_url}"
+    if external_ip is None:
+        containerd_certs_file = """
+server = "https://{registry_url}
 
 [host."https://{registry_url}"]
-  skip_verify = true
+skip_verify = true
     """.format(
         registry_url=LOCAL_REGISTRY_URL
     )
+    else:
+        containerd_certs_file = """
+server = "https://{registry_url}
+
+[host."https://{registry_url}"]
+        skip_verify = true
+
+server = "https://{external_registry_url}
+
+[host."https://{external_registry_url}"]
+    skip_verify = true
+    """.format(
+        registry_url=LOCAL_REGISTRY_URL,
+        external_registry_url=EXTERNAL_REGISTRY_URL
+    )
+
     run(
         "sudo sh -c \"echo '{}' > {}\"".format(
             containerd_certs_file, join(containerd_certs_dir, "hosts.toml")
@@ -165,13 +257,13 @@ server = "https://{registry_url}"
         dns_file: {"path": "/etc/hosts", "mode": "w"},
         HOST_CERT_PATH: {"path": "/etc/ssl/certs/ca-certificates.crt", "mode": "a"},
     }
-    replace_agent(ctx, extra_files=extra_files)
+    replace_agent(extra_files=extra_files)
 
-    # ----------
-    # Knative config
-    # ----------
+    # # ----------
+    # # Knative config
+    # # ----------
 
-    # First, create a k8s secret with the credentials
+    # # First, creatce a k8s secret with the credentials
     kube_cmd = (
         "-n knative-serving create secret generic {} --from-file=ca.crt={}".format(
             K8S_SECRET_NAME, HOST_CERT_PATH
@@ -194,9 +286,9 @@ def stop(ctx):
     # For Knative, we only need to delete the secret, as the other bit is a
     # patch to the controller deployment that can be applied again
     kube_cmd = "-n knative-serving delete secret {}".format(K8S_SECRET_NAME)
-    run_kubectl_command(kube_cmd)
+    #run_kubectl_command(kube_cmd)
 
     # For Kata and containerd, all configuration is reversible, so we only
     # need to sop the container image
-    docker_cmd = "docker run --rm -f {}".format(REGISTRY_CTR_NAME)
+    docker_cmd = "docker stop {}".format(REGISTRY_CTR_NAME)
     run(docker_cmd, shell=True, check=True)

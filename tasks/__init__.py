@@ -1,6 +1,7 @@
 from invoke import Collection
 
 from . import apps
+from . import hybrid
 from . import coco
 from . import containerd
 from . import cosign
@@ -18,12 +19,15 @@ from . import qemu
 from . import registry
 from . import sev
 from . import skopeo
+from . import nydus_snapshotter
 
 from tasks.eval import ns as eval_ns
+from tasks.profile import ns as profile_ns
 
 ns = Collection(
     apps,
     coco,
+    hybrid,
     containerd,
     cosign,
     format_code,
@@ -34,6 +38,7 @@ ns = Collection(
     kbs,
     knative,
     kubeadm,
+    nydus_snapshotter,
     operator,
     ovmf,
     qemu,
@@ -43,3 +48,4 @@ ns = Collection(
 )
 
 ns.add_collection(eval_ns, name="eval")
+ns.add_collection(profile_ns, name="profile")

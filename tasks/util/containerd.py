@@ -14,7 +14,10 @@ def get_journalctl_containerd_logs(timeout_mins=1):
     """
     tmp_file = "/tmp/journalctl.log"
     journalctl_cmd = "sudo journalctl -xeu containerd --no-tail "
-    journalctl_cmd += '--since "{} min ago" -o json > {}'.format(timeout_mins, tmp_file)
+    if timeout_mins is not None:
+        journalctl_cmd += ' --since "{} min ago"'.format(timeout_mins)
+
+    journalctl_cmd += " -o json > {}".format(tmp_file)
     run(journalctl_cmd, shell=True, check=True)
 
     with open(tmp_file, "r") as fh:
@@ -38,7 +41,6 @@ def get_event_from_containerd_logs(
     for i in range(num_repeats):
         try:
             out = get_journalctl_containerd_logs(timeout_mins)
-
             event_json = []
             for o in out:
                 o_json = json_loads(o)
@@ -96,7 +98,7 @@ def get_ts_for_containerd_event(
     Get the journalctl timestamp for one event in the containerd logs
     """
     event_json = get_event_from_containerd_logs(
-        event_name, event_id, 1, extra_event_id=None, timeout_mins=timeout_mins
+        event_name, event_id, 1, extra_event_id=extra_event_id, timeout_mins=timeout_mins
     )[0]
     ts = int(event_json["__REALTIME_TIMESTAMP"]) / 1e6
 

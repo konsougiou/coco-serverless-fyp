@@ -4,6 +4,8 @@ metadata:
   name: coco-helloworld-py
   labels:
     apps.coco-serverless/name: helloworld-py
+  annotations: 
+    io.containerd.cri.runtime-handler: kata-qemu-sev
 spec:
   replicas: 1
   selector:
@@ -13,12 +15,12 @@ spec:
     metadata:
       labels:
         apps.coco-serverless/name: helloworld-py
-        io.katacontainers.config.pre_attestation.enabled: "false"
+        io.katacontainers.config.pre_attestation.enabled: "false" 
     spec:
       runtimeClassName: kata-qemu-sev
       containers:
       - name: helloworld-py
-        image: ghcr.io/csegarragonz/coco-helloworld-py:unencrypted
-        imagePullPolicy: Always
+        image: registry.coco-csg.com/hello-world-flask:unencrypted
         ports:
         - containerPort: 8080
+

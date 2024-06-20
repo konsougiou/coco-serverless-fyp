@@ -22,6 +22,7 @@ from tasks.util.containerd import (
     get_all_events_in_between,
     get_ts_for_containerd_event,
 )
+from tasks.util.env import COCO_RELEASE_VERSION
 from tasks.util.k8s import template_k8s_file
 from tasks.util.kubeadm import get_pod_names_in_ns, run_kubectl_command
 from time import sleep, time

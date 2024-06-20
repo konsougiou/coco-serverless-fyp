@@ -1,8 +1,12 @@
 # CoCo Serverless
 
-The goal of this project is to deploy [Knative](https://knative.dev/docs/) on
-[CoCo](https://github.com/confidential-containers) and run some baseline
-benchmarks.
+This is project is an extention of the [coco-serverless](https://github.com/coco-serverless/coco-serverless/edit/main/README.md) repository. The original repository has the goal to deploy [Knative](https://knative.dev/docs/) on [CoCo](https://github.com/confidential-containers) and run some baseline benchmarks. This project extends its functionality, introducing our custom CoCo implementation with an imporved image pulling mechanism (CoCo-Hybrid). This repository hosts benchmarks for CoCo-Hybrid, providing a means to compare with previously established baselines. 
+
+Our CoCo-hybrid mode makes ajustments so several of the CoCo components. The adjusted compontnets are found in the following branches of our forked repositories:
+* [Nydus-snapshotter](https://github.com/konsougiou/nydus-snapshotter/tree/ks-main-0.13.3)
+* [kata-containers](https://github.com/coco-serverless/kata-containers/tree/ks-prod)
+* [guest-components](https://github.com/coco-serverless/guest-components/tree/KS-prod)
+* [nydus](https://github.com/konsougiou/nydus/tree/ks-prod)
 
 All instructions in this repository assume that you have checked-out the source
 code, and have activated the python virtual environment:
@@ -34,7 +38,7 @@ inv k8s.install [--clean]
 You may also want to install `k9s`, a kubernetes monitoring tool:
 
 ```bash
-inv k9s.install
+inv k9s.install-k9s
 ```
 
 ## Quick Start
@@ -73,6 +77,29 @@ If your app uses Knative, you will have to install it first:
 ```bash
 inv knative.install
 ```
+## Setting Up CoCo-Hybrid
+
+In order to enable the CoCo-Hybrid mode, the following configuration steps need to be taken:
+
+Our customised nydus-snapshotter binary, linux Kernel and VM initrd image. These can be installed using the following command:
+
+```bash
+inv hybrid.install-cc-hybrid-deps
+```
+
+The kata configs can then be adjusted to point to the nre kernel and initrd using the following command
+
+```bash
+inv hybrid.update-configs
+```
+
+Additionally, in ordert to configure the snapshotter to be in our hybrid mode the following commands can be run:
+
+```bash
+inv nydus-snapshotter.populate_host_sharing_config
+inv nydus-snapshotter.toggle_mode --hybrid
+```
+
 
 ## Evaluation
 
